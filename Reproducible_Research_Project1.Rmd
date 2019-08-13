@@ -1,0 +1,188 @@
+---
+title: "Quantified Self Movement Analysis"
+author: "Erik Eastman"
+date: "August 13, 2019"
+output: html_document
+---
+
+
+This is an analysis of activity monitoring device data (think Fitbit). The data was collected for a 2-month period and is collected in 5-minute intervals. The data consists of a count of steps taken within the interval, the date, and the interval idenifier called "Interval".
+
+
+####Set RMarkdown options for all code chunks
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+
+###Loading the data
+```{r read_data, message=FALSE}
+library(knitr)
+library(dplyr)
+library(ggplot2)
+
+
+raw_data <- read.csv("C:/Users/ee60700/Documents/Coursera/Reproducible Research/Course_Project_1/activity.csv")
+    
+```
+
+
+
+###What is the mean total number of steps taken per day?
+(Missing values not included.)
+The histogram below shows that the most days fell between 10-15 thousand steps.
+```{r total_steps}
+total_steps_1 <- raw_data %>% filter(!is.na(steps)) %>%
+                              group_by(date) %>%
+                              summarise(steps = sum(steps))
+                    
+
+    histogram_1 <- ggplot(total_steps_1, aes(steps)) + 
+      geom_histogram(binwidth = 2500) + 
+      labs(y="Number of Days", x="Total Steps", title = "Total Steps Per Day")
+    
+        histogram_1
+
+```
+
+
+
+####What are the mean and median number of steps taken per day?
+The data show that the mean and median were pretty close but there were a wide range totals for different days. The min and max were significantly different.
+```{r mean_med_steps}
+   steps_summary_1 <- unclass(summary(total_steps_1$steps))
+
+      kable(steps_summary_1, 
+            caption = "Summary of Total Steps By Day",
+            align = 'l')
+
+```
+
+
+
+###What is the average daily activity pattern?
+The time series plot below shows the average numbers of steps taken at each interval (time of day). This is averaged over every day in the dataset. There is a large spike around interval 835 as shown below the time series plot.
+```{r avg_daily_pattern}
+avg_dly_pattern_1 <- raw_data %>% filter(!is.na(steps)) %>%
+                                  group_by(interval) %>%
+                                  summarise(steps = mean(steps))
+
+    time_series_1 <- ggplot(avg_dly_pattern_1, aes(x = interval, y = steps)) +
+                     geom_line() + 
+                     labs(title = "Time Series of Mean Steps By Interval Throughout the Day",
+                          x="Interval", 
+                          y="Mean Steps")
+    
+    
+                time_series_1
+
+```
+
+
+
+####Which 5-minute interval had the highest average number of steps?
+```{r max_avg_steps}
+
+max_steps_1 <- avg_dly_pattern_1 %>% arrange(desc(steps)) %>%
+                                     slice(1)  
+
+    kable(max_steps_1, align = "l")
+
+```
+
+
+
+###Imputing missing values
+Replacing the missing values "NAs". Here I replace the missing values by averaging the number of steps by interval across all days. First, I output the total number of missing values in the dataset (2,304). 
+```{r impute_vals, message=FALSE}
+
+count_NAs <- raw_data %>% filter(is.na(steps)) %>% summarise(n())
+
+        count_NAs
+   
+
+NA_Rows <- raw_data %>% filter(is.na(steps)) %>% 
+                        select(-steps) %>% 
+                        left_join(y=avg_dly_pattern_1) %>%
+                        select(steps, date, interval)
+
+
+raw_data_imp <- raw_data %>% filter(!is.na(steps)) %>%
+                             union_all(y=NA_Rows) %>%
+                             arrange(date, interval)
+                             
+                       
+
+```
+
+
+
+
+####Make a histogram of the steps taken with the imputed values
+Looking at the histogram below, imputing the data does not change the shape significantly from the prior histogram.
+
+```{r impute_hist}
+
+total_steps_2 <- raw_data_imp %>% group_by(date) %>%
+                                  summarise(steps = sum(steps))
+
+
+histogram_2 <- ggplot(total_steps_2, aes(steps)) + 
+      geom_histogram(binwidth = 2500) + 
+      labs(y="Number of Days", x="Total Steps", title = "Total Steps Per Day")
+    
+        histogram_2
+
+```
+
+
+
+
+Mean and median steps taken per day
+```{r mean_med_imp}
+
+ steps_summary_2 <- unclass(summary(total_steps_2$steps))
+
+      kable(steps_summary_2, 
+            caption = "Summary of Total Steps By Day", 
+            align = 'l')
+
+```
+
+
+###Are there differences in activity patterns between weekdays and weekends?
+The time series below indicates that there are some differences in the average number of steps throughout the day when controlling for the weekend. The same spike happens just before interval 1000 but on the weekend, the number of steps stay elevated throughout the remainder of the day as compared to the weekdays.
+
+```{r weekdays panel plot}
+
+raw_data_imp2 <- raw_data_imp
+raw_data_imp2$date <- lubridate::mdy(raw_data_imp2$date)
+raw_data_imp2 <- raw_data_imp2 %>% arrange(date, interval)
+                             
+raw_data_imp2$weekday <- weekdays(raw_data_imp2$date)
+
+raw_data_imp2 <- raw_data_imp2 %>% 
+                 mutate(weekend_ind = case_when(weekday ==  "Monday" ~ "Weekday",
+                                                weekday == "Tuesday" ~ "Weekday",
+                                                weekday == "Wednesday" ~ "Weekday",
+                                                weekday == "Thursday" ~ "Weekday",
+                                                weekday == "Friday"~ "Weekday",
+                                                weekday == "Saturday"~ "Weekend",
+                                                weekday == "Sunday"~ "Weekend"))
+
+avg_pattern_week <- raw_data_imp2 %>% group_by(interval, weekend_ind) %>%
+                                      summarise(steps = mean(steps))
+
+    time_series_panel <- ggplot(avg_pattern_week, aes(x = interval, y = steps)) +
+                     geom_line() + 
+                     labs(title = "Mean Steps By Interval Weekend Vs. Weekday",
+                          x="Interval", 
+                          y="Mean Steps") +
+                      facet_grid(weekend_ind ~.)
+    
+      time_series_panel
+
+
+```
+
+
